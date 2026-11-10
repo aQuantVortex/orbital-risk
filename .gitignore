@@ -12,3 +12,5 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 !data/processed/*.csv
+
+.pytest_cache/
