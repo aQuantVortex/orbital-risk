@@ -23,15 +23,27 @@ The consequence is a market that cannot measure the risk it underwrites. Fewer t
 
 The central methodological choice. Public failure registries cover mostly large, insured, Western spacecraft, which would bias any model trained on them and leave too few events to fit anything.
 
-Instead, failures are detected from orbital behaviour. An operational satellite fights atmospheric drag by periodically raising its orbit, producing a sawtooth altitude trace. When control ends, the burns stop and the trace becomes monotonic decay. That transition is detectable, applies uniformly to every object, and yields far more events.
+Instead, failures are detected from orbital behaviour. An operational satellite fights atmospheric drag by periodically raising its orbit. When maintenance ends, the raising stops and the trace becomes monotonic decay. That transition applies uniformly to every object and yields far more events.
 
-Two signals are combined, with a third for corroboration:
+**Detection uses manoeuvre frequency, not magnitude.** This was established by validating against real data, and it corrected an assumption that was wrong by roughly a factor of twenty — see below.
 
-1. Cessation of station-keeping manoeuvres (positive jumps in semi-major axis)
-2. Sustained negative altitude slope afterwards
-3. A jump in the `BSTAR` drag term — a satellite that loses attitude control tumbles, changing its effective cross-section
+Curated failure records serve as the **validation set** rather than the training target.
 
-Curated failure records then serve as the **validation set** rather than the training target.
+### What validation against real data changed
+
+Pulled from Space-Track on 11 November 2026: Envisat (29,574 element sets), Terra (33,164), GOCE (4,607).
+
+**The premise holds.** Envisat lost contact on 8 April 2012, the first week of Q2. Its manoeuvre frequency collapses in exactly that quarter: 0.251 before, 0.018 after, with monotonic decay beginning immediately.
+
+**But the original threshold was wrong by ~20×.** The first detector looked for orbit-raising burns above 0.3 km. Envisat's real burns move semi-major axis by about 0.016 km/day at the 99th percentile. That detector found *zero* manoeuvres across Envisat's entire operational life and would have discarded a documented failure as "never station-keeping." Frequency works where magnitude does not.
+
+**And maintenance cessation is not the same as failure.** Terra is operational in 2026, but NASA ended its orbit maintenance around 2020. Its manoeuvre frequency reads 0.019 in 2021 and 0.000 in 2026 — indistinguishable from a dead satellite on that statistic alone. For an insurance model these are different things.
+
+The discriminator is **abruptness**: Envisat fell from 0.24 to 0.04 in one quarter, while Terra declined over about four years. A failure is a step; a planned wind-down is a ramp. The detector reports both cessation and its shape, and only abrupt cessation is labelled a probable failure.
+
+Baselines are computed **per satellite**, since Envisat ran at 0.25 and Terra at 0.09 while both were fully maintained — no absolute threshold separates them.
+
+See `STATUS.md` for the full validation table and `data/processed/validation_observations.csv` for the measurements.
 
 ### Survival analysis, because most satellites have not failed
 
@@ -106,20 +118,24 @@ Register for free API access at [space-track.org](https://www.space-track.org/au
 - Rate-limited client with disk caching
 - Stratified sampling and weekly decimation
 - KDE debris density estimation per shell per epoch
-- Failure detection via manoeuvre-cessation changepoint
+- Frequency-based failure detection with per-satellite baselines and an abruptness test
+- Core assumption validated against real Envisat, Terra and GOCE data
 - Counting-process panel assembly
 - Cox, Weibull and logistic model layer with PH assumption testing
-- Unit tests on synthetic traces
+- 28 unit tests, calibrated to measured magnitudes
 
 **In progress**
-- Detector validation against documented failures (Envisat, GOCE, with Terra and Aura as controls)
-- Full population ingestion
+- Full validation run producing `detector_validation.png`
+- Population ingestion
 
 **Remaining**
+- Improving wind-down separation (currently 6/15 on synthetic cases)
 - Model fitting on the complete panel
 - Bandwidth and shell-boundary sensitivity analysis
 - Market-aggregate validation against published loss ratios
 - Pricing comparison and written report
+
+Full detail in `STATUS.md`.
 
 ---
 
@@ -136,6 +152,8 @@ Stated here rather than discovered later.
 | Starlink dominates the recent population | Stratified out and analysed separately. |
 | Per-policy premium data is proprietary (Seradata) | Validation performed at market aggregate level only. |
 | Most debris is untracked (catalog covers >10 cm) | Tracked density is a proxy, assuming untracked debris scales with tracked. Stated explicitly. |
+| Operational satellites that stop orbit maintenance look like failures | Abruptness test separates them. Imperfect — see the open issue in `STATUS.md`. |
+| The frequency statistic fails where observation noise exceeds daily decay | A dead satellite then reads ~0.5 rather than ~0.02. Most relevant at high altitude where decay is slowest; a regression test documents the breakdown. |
 
 ---
 

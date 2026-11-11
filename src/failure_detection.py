@@ -2,27 +2,52 @@
 Failure labelling from orbital behaviour.
 
 The premise: an operational satellite in LEO fights atmospheric drag by
-periodically raising its orbit. Its altitude trace is a sawtooth -- slow
-decay punctuated by positive jumps. When control ends (propellant
-exhaustion, subsystem failure, end of mission), the jumps stop and the
-trace becomes monotonic decay.
+periodically raising its orbit. When active orbit maintenance ends, the
+raising stops and the altitude trace becomes monotonic decay. Detecting
+that transition gives labels for the whole population on a uniform
+definition, rather than inheriting the reporting bias of curated failure
+registries, which cover mostly large, insured, Western spacecraft.
 
-Detecting that transition gives failure labels for the whole population
-on a uniform definition, rather than inheriting the reporting bias of
-curated failure registries, which cover mostly large, insured, Western
-spacecraft.
+WHAT THE REAL DATA CHANGED
+--------------------------
+An earlier version of this module looked for individual orbit-raising
+burns above a fixed altitude threshold (0.3 km). Validation against real
+Space-Track `gp_history` showed that threshold is wrong by roughly a
+factor of twenty: Envisat's real maintenance burns move semi-major axis
+by about 0.016 km/day at the 99th percentile. The magnitude-threshold
+detector found ZERO manoeuvres across Envisat's entire operational life
+and would have silently discarded a documented failure.
 
-Two independent signals are combined:
-  1. Cessation of station-keeping manoeuvres (positive SMA jumps).
-  2. Sustained negative slope in semi-major axis afterwards.
+What does work is manoeuvre FREQUENCY. Measured on Envisat:
 
-A third corroborating signal is available in BSTAR: a satellite that
-loses attitude control starts tumbling, changing its effective cross-
-sectional area, which shows up as a jump in the fitted drag term.
+    fraction of days with a positive altitude change
+      before 2012-04-08 (documented contact loss) : 0.251
+      after                                        : 0.018
 
-Caveat handled here: objects below roughly 400 km decay quickly under
-drag whether or not they are healthy, so natural decay can masquerade as
-failure. `min_altitude_km` excludes that regime.
+That is the statistic this module now uses.
+
+MAINTENANCE CESSATION IS NOT THE SAME AS FAILURE
+------------------------------------------------
+Terra (NORAD 25994) is operational as of 2026 — instruments working,
+data downlinked — but NASA ended its orbit maintenance around 2020 and
+let it drift from its 10:30 mean local time. Its positive-delta fraction
+reads 0.019 in 2021 and 0.000 in 2026, which is indistinguishable from a
+dead satellite on the frequency statistic alone.
+
+The discriminator is ABRUPTNESS. Envisat collapsed from 0.24 to 0.04 in
+a single quarter. Terra declined over roughly four years (0.31, 0.30,
+0.24, 0.12, 0.019). A failure is a step; a planned wind-down is a ramp.
+
+The detector therefore reports two things: whether maintenance ceased,
+and whether it ceased abruptly. Only abrupt cessation is labelled as a
+probable failure. Gradual cessation is labelled separately so the
+modelling stage can decide how to treat it rather than having the
+ambiguity hidden inside a boolean.
+
+Caveat still handled: objects below roughly 400 km decay quickly under
+drag whether or not they are healthy, and some (GOCE) use continuous
+low-thrust propulsion that makes the frequency statistic meaningless.
+`min_altitude_km` excludes that regime.
 """
 
 import logging
@@ -35,92 +60,163 @@ LOGGER = logging.getLogger(__name__)
 
 EARTH_RADIUS_KM = 6378.137
 
+# Label values for `status`.
+STATUS_ACTIVE = "active"
+STATUS_FAILED = "failed_abrupt"
+STATUS_WOUND_DOWN = "maintenance_ended_gradual"
+STATUS_ABSTAIN = "abstain"
+
 
 @dataclass
 class DetectionResult:
     """Outcome of running the detector on one object."""
 
     norad_id: int
-    failed: bool
+    status: str
+    failed: bool               # True only for abrupt cessation
     failure_epoch: pd.Timestamp | None
-    last_maneuver_epoch: pd.Timestamp | None
-    n_maneuvers: int
-    decay_slope_km_per_week: float | None
-    bstar_ratio: float | None
+    baseline_pos_frac: float | None
+    final_pos_frac: float | None
+    transition_quarters: float | None   # how long the decline took
+    decay_slope_km_per_day: float | None
+    n_periods: int
     reason: str
 
     def to_dict(self):
         return asdict(self)
 
 
-def rolling_slope(series, window):
+def daily_series(history):
     """
-    Slope of a least-squares line fitted over a trailing window.
+    Collapse an element-set history to one median altitude per day.
 
-    Implemented directly rather than pulled from a library so the
-    computation is transparent: for evenly spaced x, the OLS slope is
-    cov(x, y) / var(x).
+    Space-Track may hold several element sets per object per day, and
+    individual fits carry noise well above the real day-to-day change.
+    Taking the daily median suppresses that without touching the signal.
     """
-    values = np.asarray(series, dtype=float)
-    n = len(values)
-    slopes = np.full(n, np.nan)
+    frame = history.copy()
 
-    if n < window:
-        return slopes
+    if "altitude_km" not in frame.columns:
+        if "SEMIMAJOR_AXIS" not in frame.columns:
+            return pd.DataFrame(columns=["date", "altitude_km"])
+        frame["altitude_km"] = frame["SEMIMAJOR_AXIS"] - EARTH_RADIUS_KM
 
-    x = np.arange(window, dtype=float)
-    x_centred = x - x.mean()
-    x_var = (x_centred ** 2).sum()
+    frame = frame.dropna(subset=["altitude_km", "EPOCH"])
+    if frame.empty:
+        return pd.DataFrame(columns=["date", "altitude_km"])
 
-    for i in range(window - 1, n):
-        y = values[i - window + 1 : i + 1]
-        if np.isnan(y).any():
-            continue
-        slopes[i] = (x_centred * (y - y.mean())).sum() / x_var
+    frame["date"] = pd.to_datetime(frame["EPOCH"]).dt.normalize()
+    daily = (
+        frame.groupby("date")["altitude_km"]
+        .median()
+        .reset_index()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+    return daily
 
-    return slopes
 
-
-def detect_maneuvers(altitudes, threshold_km=0.3):
+def positive_delta_fraction(daily, max_gap_days=3):
     """
-    Index positions where altitude rose by more than `threshold_km`.
+    Fraction of consecutive days on which altitude rose.
 
-    A positive jump against a backdrop of drag decay is evidence of an
-    orbit-raising burn. The threshold sits above typical element-set
-    noise but below a real station-keeping manoeuvre.
+    Drag pulls altitude down continuously, so on an unmaintained
+    satellite almost every day is negative. Orbit-raising produces the
+    positive days. Gaps longer than `max_gap_days` are skipped, since a
+    rise across a long gap says nothing about a single manoeuvre.
+
+    Returns (fraction, n_comparisons).
     """
-    values = np.asarray(altitudes, dtype=float)
-    deltas = np.diff(values, prepend=values[0])
-    return np.where(deltas > threshold_km)[0]
+    if len(daily) < 2:
+        return np.nan, 0
+
+    dates = daily["date"].values
+    altitudes = daily["altitude_km"].values
+
+    gaps = (dates[1:] - dates[:-1]) / np.timedelta64(1, "D")
+    deltas = altitudes[1:] - altitudes[:-1]
+
+    usable = gaps <= max_gap_days
+    if usable.sum() == 0:
+        return np.nan, 0
+
+    return float((deltas[usable] > 0).mean()), int(usable.sum())
+
+
+def quarterly_activity(daily, min_days=8, max_gap_days=3):
+    """
+    Positive-delta fraction and median altitude, per calendar quarter.
+
+    Quarterly is the natural resolution: it is long enough that the
+    fraction is stable, and short enough to date a transition usefully.
+    Quarters with fewer than `min_days` usable comparisons are dropped.
+    """
+    if len(daily) < 2:
+        return pd.DataFrame(columns=["period", "pos_frac", "altitude_km", "n_days"])
+
+    frame = daily.copy()
+    frame["gap"] = frame["date"].diff().dt.days
+    frame["delta"] = frame["altitude_km"].diff()
+    frame = frame[frame["gap"].notna() & (frame["gap"] <= max_gap_days)]
+
+    if frame.empty:
+        return pd.DataFrame(columns=["period", "pos_frac", "altitude_km", "n_days"])
+
+    frame["period"] = frame["date"].dt.to_period("Q").dt.to_timestamp()
+
+    grouped = (
+        frame.groupby("period")
+        .agg(
+            pos_frac=("delta", lambda s: float((s > 0).mean())),
+            altitude_km=("altitude_km", "median"),
+            n_days=("delta", "size"),
+        )
+        .reset_index()
+    )
+    return grouped[grouped["n_days"] >= min_days].reset_index(drop=True)
 
 
 def detect_failure(
     history,
-    window=8,
-    maneuver_threshold_km=0.3,
-    quiet_weeks=52,
-    decay_threshold_km_per_week=-0.05,
+    baseline_quarters=8,
+    quiet_quarters=4,
+    drop_ratio=0.35,
+    abrupt_quarters=4,
+    min_baseline_frac=0.04,
     min_altitude_km=400,
+    min_quarters=16,
 ):
     """
-    Detect end-of-life for one satellite from its weekly element history.
+    Detect end of orbit maintenance for one satellite.
 
     Parameters
     ----------
     history : DataFrame
-        Weekly element sets for one object, with EPOCH and altitude_km.
-    window : int
-        Weeks in the rolling slope window.
-    maneuver_threshold_km : float
-        Altitude rise counted as a station-keeping burn.
-    quiet_weeks : int
-        Weeks without a manoeuvre before the satellite is called inactive.
-        One year is conservative: some missions manoeuvre infrequently.
-    decay_threshold_km_per_week : float
-        Slope that must be sustained after the last burn to confirm decay.
+        Element sets for one object, with EPOCH and SEMIMAJOR_AXIS or
+        altitude_km, plus NORAD_CAT_ID.
+    baseline_quarters : int
+        Quarters used to establish the satellite's own maintenance rate.
+        A per-object baseline is essential: Envisat ran at roughly 0.25
+        while Terra ran at roughly 0.09, both while fully maintained, so
+        no single absolute threshold separates them.
+    quiet_quarters : int
+        Consecutive quarters below the drop threshold before cessation
+        is called.
+    drop_ratio : float
+        Fraction of baseline below which activity counts as ceased.
+    abrupt_quarters : int
+        A decline completing within this many quarters is treated as a
+        failure; slower declines are treated as a planned wind-down.
+        Four quarters sits well inside the observed gap: Envisat's
+        decline took one quarter, Terra's took about twelve.
+    min_baseline_frac : float
+        If the satellite never showed this much activity, it was never
+        station-keeping and the detector abstains.
     min_altitude_km : float
-        Below this, drag decay is rapid regardless of health, so the
-        detector abstains rather than producing a false positive.
+        Below this, drag decay is rapid regardless of health and some
+        craft use continuous low thrust, so the detector abstains.
+    min_quarters : int
+        Minimum observed quarters for any verdict.
 
     Returns
     -------
@@ -128,152 +224,137 @@ def detect_failure(
     """
     norad_id = int(history["NORAD_CAT_ID"].iloc[0])
 
-    frame = history.copy()
-    if "altitude_km" not in frame.columns:
-        if "SEMIMAJOR_AXIS" not in frame.columns:
-            return DetectionResult(
-                norad_id, False, None, None, 0, None, None, "no_altitude_data"
-            )
-        frame["altitude_km"] = frame["SEMIMAJOR_AXIS"] - EARTH_RADIUS_KM
+    def result(status, **kwargs):
+        defaults = dict(
+            norad_id=norad_id,
+            status=status,
+            failed=(status == STATUS_FAILED),
+            failure_epoch=None,
+            baseline_pos_frac=None,
+            final_pos_frac=None,
+            transition_quarters=None,
+            decay_slope_km_per_day=None,
+            n_periods=0,
+            reason=status,
+        )
+        defaults.update(kwargs)
+        return DetectionResult(**defaults)
 
-    frame = frame.dropna(subset=["altitude_km", "EPOCH"]).reset_index(drop=True)
+    daily = daily_series(history)
+    if len(daily) < 90:
+        return result(STATUS_ABSTAIN, reason="insufficient_history")
 
-    if len(frame) < window * 3:
-        return DetectionResult(
-            norad_id, False, None, None, 0, None, None, "insufficient_history"
+    if float(daily["altitude_km"].median()) < min_altitude_km:
+        return result(STATUS_ABSTAIN, reason="below_min_altitude")
+
+    activity = quarterly_activity(daily)
+    n_periods = len(activity)
+
+    if n_periods < min_quarters:
+        return result(
+            STATUS_ABSTAIN, reason="insufficient_quarters", n_periods=n_periods
         )
 
-    altitudes = frame["altitude_km"].values
-    epochs = frame["EPOCH"].values
+    baseline = float(activity["pos_frac"].iloc[:baseline_quarters].median())
 
-    if np.nanmedian(altitudes) < min_altitude_km:
-        return DetectionResult(
-            norad_id, False, None, None, 0, None, None, "below_min_altitude"
+    if not np.isfinite(baseline) or baseline < min_baseline_frac:
+        return result(
+            STATUS_ABSTAIN,
+            reason="no_station_keeping",
+            baseline_pos_frac=baseline if np.isfinite(baseline) else None,
+            n_periods=n_periods,
         )
 
-    maneuver_idx = detect_maneuvers(altitudes, maneuver_threshold_km)
-    n_maneuvers = len(maneuver_idx)
+    threshold = baseline * drop_ratio
+    below = (activity["pos_frac"] < threshold).values
 
-    # A satellite that never manoeuvred was never station-keeping, so this
-    # detector cannot speak to whether or when it failed.
-    if n_maneuvers < 3:
-        return DetectionResult(
-            norad_id, False, None, None, n_maneuvers, None, None, "no_station_keeping"
+    # Earliest index from which the satellite stays below threshold for
+    # `quiet_quarters` and never recovers.
+    cessation_index = None
+    for i in range(baseline_quarters, len(below) - quiet_quarters + 1):
+        if below[i : i + quiet_quarters].all() and below[i:].mean() > 0.8:
+            cessation_index = i
+            break
+
+    final_frac = float(activity["pos_frac"].iloc[-quiet_quarters:].median())
+
+    if cessation_index is None:
+        return result(
+            STATUS_ACTIVE,
+            reason="still_maintaining",
+            baseline_pos_frac=baseline,
+            final_pos_frac=final_frac,
+            n_periods=n_periods,
         )
 
-    last_maneuver = int(maneuver_idx[-1])
-    last_maneuver_epoch = pd.Timestamp(epochs[last_maneuver])
-    weeks_since_last = len(frame) - last_maneuver - 1
+    cessation_epoch = pd.Timestamp(activity["period"].iloc[cessation_index])
 
-    if weeks_since_last < quiet_weeks:
-        return DetectionResult(
-            norad_id,
-            False,
-            None,
-            last_maneuver_epoch,
-            n_maneuvers,
-            None,
-            None,
-            "still_manoeuvring",
-        )
-
-    # Confirm sustained decay after the last burn.
-    post = altitudes[last_maneuver:]
-    slopes = rolling_slope(post, window)
-    valid = slopes[~np.isnan(slopes)]
-
-    if len(valid) == 0:
-        return DetectionResult(
-            norad_id,
-            False,
-            None,
-            last_maneuver_epoch,
-            n_maneuvers,
-            None,
-            None,
-            "no_slope_estimate",
-        )
-
-    median_slope = float(np.median(valid))
-    decaying = median_slope < decay_threshold_km_per_week
-
-    bstar_ratio = _bstar_jump(frame, last_maneuver)
-
-    if not decaying:
-        return DetectionResult(
-            norad_id,
-            False,
-            None,
-            last_maneuver_epoch,
-            n_maneuvers,
-            median_slope,
-            bstar_ratio,
-            "quiet_but_not_decaying",
-        )
-
-    return DetectionResult(
-        norad_id,
-        True,
-        last_maneuver_epoch,
-        last_maneuver_epoch,
-        n_maneuvers,
-        median_slope,
-        bstar_ratio,
-        "station_keeping_ceased",
+    # How long the decline took: quarters between the last quarter at
+    # near-full rate and the first quarter below threshold.
+    #
+    # Measured on a 3-quarter rolling median rather than the raw series.
+    # Quarterly pos_frac is noisy enough that a single high quarter part
+    # way down a multi-year ramp would otherwise make a gradual wind-down
+    # look abrupt, which is exactly the Terra-versus-Envisat distinction
+    # this number has to carry.
+    smoothed = (
+        activity["pos_frac"]
+        .rolling(3, center=True, min_periods=1)
+        .median()
+        .values
+    )
+    above_before = np.where(smoothed[:cessation_index] >= baseline * 0.8)[0]
+    transition = float(
+        cessation_index - above_before[-1] if len(above_before) else cessation_index
     )
 
+    # Decay slope after cessation, as corroboration.
+    post = daily[daily["date"] >= cessation_epoch]
+    if len(post) > 30:
+        days = (post["date"] - post["date"].iloc[0]).dt.days.values.astype(float)
+        slope = float(np.polyfit(days, post["altitude_km"].values, 1)[0])
+    else:
+        slope = None
 
-def _bstar_jump(frame, split_index):
-    """
-    Ratio of median BSTAR after the last burn to before it.
+    status = STATUS_FAILED if transition <= abrupt_quarters else STATUS_WOUND_DOWN
+    reason = (
+        "abrupt_cessation" if status == STATUS_FAILED else "gradual_wind_down"
+    )
 
-    A tumbling satellite presents a different cross-section to the
-    atmosphere, so a ratio well above 1 corroborates loss of control.
-    Returns None when BSTAR is unavailable or degenerate.
-    """
-    if "BSTAR" not in frame.columns:
-        return None
-
-    before = frame["BSTAR"].iloc[:split_index].dropna()
-    after = frame["BSTAR"].iloc[split_index:].dropna()
-
-    if len(before) < 5 or len(after) < 5:
-        return None
-
-    before_median = float(before.median())
-    after_median = float(after.median())
-
-    if before_median <= 0:
-        return None
-    return after_median / before_median
+    return result(
+        status,
+        reason=reason,
+        failure_epoch=cessation_epoch,
+        baseline_pos_frac=baseline,
+        final_pos_frac=final_frac,
+        transition_quarters=transition,
+        decay_slope_km_per_day=slope,
+        n_periods=n_periods,
+    )
 
 
 def detect_population(histories, **kwargs):
     """Run the detector over every object and return a label table."""
     results = []
-    for norad_id, group in histories.groupby("NORAD_CAT_ID"):
+    for _, group in histories.groupby("NORAD_CAT_ID"):
         results.append(detect_failure(group, **kwargs).to_dict())
 
     frame = pd.DataFrame(results)
     if not frame.empty:
-        LOGGER.info(
-            "Detected %d failures across %d objects (%.1f%%)",
-            int(frame["failed"].sum()),
-            len(frame),
-            100 * frame["failed"].mean(),
-        )
+        counts = frame["status"].value_counts().to_dict()
+        LOGGER.info("Detection over %d objects: %s", len(frame), counts)
     return frame
 
 
-def validate_against_known(detections, known_failures, tolerance_days=180):
+def validate_against_known(detections, known_outcomes, tolerance_days=180):
     """
-    Score detected failure dates against independently documented ones.
+    Score detections against independently documented outcomes.
 
-    `known_failures` maps NORAD ID -> documented failure date. Returns a
-    per-object comparison plus summary accuracy within `tolerance_days`.
+    `known_outcomes` maps NORAD ID -> documented cessation date, or None
+    for satellites known to be still maintained.
     """
     rows = []
-    for norad_id, true_date in known_failures.items():
+    for norad_id, true_date in known_outcomes.items():
         match = detections[detections["norad_id"] == norad_id]
         if match.empty:
             rows.append(
@@ -281,37 +362,34 @@ def validate_against_known(detections, known_failures, tolerance_days=180):
                     "norad_id": norad_id,
                     "true_date": true_date,
                     "detected_date": None,
+                    "status": "not_in_population",
                     "error_days": None,
-                    "within_tolerance": False,
-                    "reason": "not_in_population",
+                    "correct": False,
                 }
             )
             continue
 
         row = match.iloc[0]
         detected = row["failure_epoch"]
-        if pd.isna(detected) or detected is None:
-            rows.append(
-                {
-                    "norad_id": norad_id,
-                    "true_date": true_date,
-                    "detected_date": None,
-                    "error_days": None,
-                    "within_tolerance": False,
-                    "reason": row["reason"],
-                }
-            )
-            continue
+        error_days = None
+        if true_date is not None and detected is not None and not pd.isna(detected):
+            error_days = (pd.Timestamp(detected) - pd.Timestamp(true_date)).days
 
-        error = (pd.Timestamp(detected) - pd.Timestamp(true_date)).days
+        if true_date is None:
+            correct = not row["failed"]
+        else:
+            correct = bool(row["failed"]) and (
+                error_days is not None and abs(error_days) <= tolerance_days
+            )
+
         rows.append(
             {
                 "norad_id": norad_id,
                 "true_date": true_date,
                 "detected_date": detected,
-                "error_days": error,
-                "within_tolerance": abs(error) <= tolerance_days,
-                "reason": row["reason"],
+                "status": row["status"],
+                "error_days": error_days,
+                "correct": correct,
             }
         )
 

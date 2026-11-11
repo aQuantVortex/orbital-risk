@@ -45,13 +45,39 @@ Curated registries cover mostly large, insured, Western spacecraft. Training on 
 
 ### The derived approach
 
-An operational satellite in LEO fights atmospheric drag by periodically raising its orbit, producing a sawtooth altitude trace. When control ends — propellant exhaustion, subsystem failure, end of mission — the burns stop and the trace becomes monotonic decay.
+An operational satellite in LEO fights atmospheric drag by periodically raising its orbit. When maintenance ends, the raising stops and the trace becomes monotonic decay.
 
-Detection combines two signals, with a third for corroboration:
+**The statistic is manoeuvre frequency, not magnitude.** An earlier version of this method counted individual orbit-raising burns above a 0.3 km threshold. Validation against real Space-Track data on 11 November 2026 showed that threshold is wrong by roughly a factor of twenty: Envisat's real maintenance burns move semi-major axis by about 0.016 km/day at the 99th percentile. The magnitude detector found zero manoeuvres across Envisat's entire operational life and would have silently discarded a documented failure.
 
-1. **Cessation of station-keeping.** Positive jumps in altitude exceeding a threshold (default 0.3 km, above element-set noise but below a real burn) are counted as manoeuvres. The last such jump, followed by a quiet period (default 52 weeks), marks candidate end-of-life.
-2. **Sustained decay afterwards.** A rolling least-squares slope over an 8-week window must stay below a negative threshold to confirm.
-3. **BSTAR jump.** A satellite that loses attitude control tumbles, changing its effective cross-section, which appears as a rise in the fitted drag term. Agreement between signals strengthens the label.
+What works is the **fraction of consecutive days on which median altitude rose**. Drag pulls altitude down continuously, so on an unmaintained satellite almost every day is negative; orbit-raising produces the positive days. Measured on Envisat:
+
+| | Positive-delta fraction |
+|---|---|
+| Before 2012-04-08 (documented contact loss) | 0.251 |
+| After | 0.018 |
+
+Element sets are first collapsed to one median altitude per day, since individual fits carry noise well above the real day-to-day change. Quarterly aggregation then gives a series stable enough to threshold but fine enough to date a transition.
+
+### Baselines are per satellite
+
+Envisat ran at 0.25 and Terra at 0.09, both while fully maintained. No absolute threshold separates them, so each satellite's baseline is taken from its own early history (default eight quarters), and cessation is defined relative to that baseline.
+
+### Cessation is not the same as failure
+
+Terra (NORAD 25994) is operational in 2026 — instruments working, data downlinked — but NASA ended its orbit maintenance around 2020 and let it drift from its 10:30 mean local time. Its positive-delta fraction reads 0.019 in 2021 and 0.000 in 2026, which on the frequency statistic alone is indistinguishable from a dead satellite.
+
+For an insurance model these are different things: a drifting-but-working satellite is not a claim.
+
+The discriminator is **abruptness**:
+
+| | Decline duration |
+|---|---|
+| Envisat (failure) | ~1 quarter (0.24 → 0.04) |
+| Terra (planned wind-down) | ~12 quarters (0.31 → 0.30 → 0.24 → 0.12 → 0.019) |
+
+A failure is a step; a planned wind-down is a ramp. The detector reports `status` as `failed_abrupt` or `maintenance_ended_gradual`, so the ambiguity is visible to the modelling stage rather than hidden inside a boolean. The transition length is measured on a three-quarter rolling median, because a single high quarter part way down a multi-year ramp would otherwise make a wind-down look abrupt.
+
+**This separation is currently the weakest part of the method.** On synthetic data it succeeds in only 6 of 15 cases. The real Envisat–Terra gap is wide, so the distinction is clearly present in real data, but the present statistic does not capture it reliably. Candidate improvements: fitting a changepoint model to the frequency series rather than thresholding it, or using the second derivative of the decline.
 
 ### Abstention cases
 
@@ -59,17 +85,26 @@ The detector returns a reason rather than a forced label when it cannot speak:
 
 | Reason | Meaning |
 |---|---|
-| `below_min_altitude` | Under ~400 km, drag decay is rapid regardless of health, so natural decay would masquerade as failure. |
-| `no_station_keeping` | Fewer than three manoeuvres detected; the satellite was never station-keeping, so cessation says nothing. |
-| `still_manoeuvring` | Recent burns; the satellite is alive. |
-| `quiet_but_not_decaying` | Burns stopped but no sustained decay. Ambiguous, so no label. |
-| `insufficient_history` | Too few observations to fit slopes. |
+| `below_min_altitude` | Under 400 km, drag decay is rapid regardless of health, and some craft (GOCE) use continuous low thrust that makes the frequency statistic meaningless. |
+| `no_station_keeping` | The satellite never showed meaningful manoeuvre activity, so cessation says nothing about it. |
+| `insufficient_history` | Fewer than 90 days of observations. |
+| `insufficient_quarters` | Fewer than 16 usable quarters, too few to establish a baseline and detect a change against it. |
+| `still_maintaining` | Activity has not dropped below the relative threshold. |
 
 ### Validation
 
-Curated records become the **validation set** rather than the training target. The detector is scored against satellites whose outcomes are matters of public record — Envisat (contact lost 8 April 2012) and GOCE (propellant exhausted October 2013) as positives, Terra and Aura as still-operational controls that must not fire.
+Curated records become the **validation set** rather than the training target. The detector is scored against satellites whose circumstances are matters of public record:
 
-On synthetic traces with known ground truth, the detector currently achieves precision 1.00 and recall 0.95.
+| Satellite | Expected | Why it is a useful test |
+|---|---|---|
+| Envisat (27386) | `failed_abrupt` | Contact lost 8 April 2012; clean step in the frequency series at exactly that quarter |
+| Terra (25994) | `maintenance_ended_gradual` | Still operational in 2026; orbit maintenance ended ~2020. The harder test — must not be labelled a failure |
+| Aura (28376) | not a failure | Second operational control |
+| GOCE (34602) | `abstain` | At 255 km with continuous ion thrust, below the altitude floor |
+
+On synthetic traces with known ground truth, detection of abrupt failures achieves precision 0.96 and recall 0.88. Separation of gradual wind-downs succeeds in 6 of 15 cases, which is the open weakness noted above.
+
+Real measurements supporting these choices are recorded in `data/processed/validation_observations.csv`.
 
 ---
 
@@ -161,6 +196,8 @@ Comparison is against a flat 8.5%, the midpoint of the 5–12% band quoted in br
 | Per-policy premiums are proprietary | Validation at market aggregate level only. |
 | Catalogue covers only objects >10 cm | Tracked density is a proxy, assuming untracked debris scales with tracked. The particle that destroyed SpainSat NG-2 was very likely smaller than the detection threshold. |
 | Event count may limit power | The ten-events-per-covariate rule is checked at fit time and warned on. This constraint is the entire argument for deriving labels rather than inheriting them. |
+| Operational satellites that stop orbit maintenance read as failures | Abruptness test separates them, imperfectly. Terra is the documented case. |
+| The frequency statistic degrades where observation noise exceeds daily decay | A dead satellite then reads near 0.5 instead of near 0.02 and the signal vanishes. Most relevant at high altitude where decay is slowest; Envisat at 766 km stays clear of it. A regression test documents the breakdown rather than asserting it does not occur. |
 
 ---
 
