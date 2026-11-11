@@ -1,0 +1,5 @@
+norad_id,name,documented,detected,status,expected,error_days,baseline_pos_frac,final_pos_frac,transition_quarters,correct
+27386,Envisat,2012-04-08,2012-04-01,failed_abrupt,failed_abrupt,-7.0,0.21195,0.0,1.0,True
+25994,Terra,,2022-07-01,maintenance_ended_gradual,maintenance_ended_gradual,,0.0892,0.0,8.0,True
+28376,Aura,,2023-04-01,maintenance_ended_gradual,,,0.07225,0.0,6.0,True
+34602,GOCE,2013-10-21,,abstain,abstain,,,,,True
