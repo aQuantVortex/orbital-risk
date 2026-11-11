@@ -13,7 +13,22 @@ The pipeline and modelling layer are built and tested. The core assumption was v
 
 ## Validation against real data (11 November 2026)
 
-Pulled from Space-Track `gp_history`: Envisat (29,574 element sets, 2002–2026), Terra (33,164 element sets, 1999–2026), GOCE (4,607 element sets, 2009–2013).
+Pulled from Space-Track `gp_history`: Envisat (29,574 element sets), Terra (33,164), Aura (15,278), GOCE (4,607). 82,623 element sets across 28,179 satellite-days.
+
+### Result: 4 of 4 correct
+
+| Satellite | Expected | Detected | Baseline | Decline | Error vs documented |
+|---|---|---|---|---|---|
+| Envisat | `failed_abrupt` | `failed_abrupt` | 0.212 | 1 quarter | **−7 days** |
+| Terra | `maintenance_ended_gradual` | `maintenance_ended_gradual` | 0.089 | 8 quarters | n/a |
+| Aura | not a failure | `maintenance_ended_gradual` | 0.072 | 6 quarters | n/a |
+| GOCE | `abstain` | `abstain` (below altitude floor) | — | — | n/a |
+
+Envisat's documented contact loss is 8 April 2012. The detector places cessation at 1 April 2012, seven days early, which is the quarter boundary — the finest resolution the quarterly series can give.
+
+Terra and Aura are both operational, and both are correctly separated from failure by the abruptness test rather than being labelled dead. Aura's wind-down beginning 2023 is consistent with its A-train exit.
+
+Figure: `data/figures/detector_validation.png`. Reproduce with `python scripts/run_real_validation.py`.
 
 ### The premise holds
 
@@ -65,11 +80,12 @@ GOCE sits at 281 km falling to 140 km, using continuous ion thrust in a drag-dom
 
 **Testing.** 28 unit tests, all passing, with synthetic magnitudes calibrated to the real measurements above rather than to guesses. Two tests document known breakdowns rather than asserting success.
 
+**Real validation.** 4 of 4 documented satellites classified correctly, with Envisat dated to within 7 days.
+
 ---
 
 ## In progress
 
-- **Full validation run** against the four documented satellites, producing `data/figures/detector_validation.png`
 - **Population ingestion** — stratified pull across LEO shells
 
 ---

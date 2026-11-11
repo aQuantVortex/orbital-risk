@@ -29,11 +29,20 @@ Instead, failures are detected from orbital behaviour. An operational satellite 
 
 Curated failure records serve as the **validation set** rather than the training target.
 
-### What validation against real data changed
+### Validation against real data
 
-Pulled from Space-Track on 11 November 2026: Envisat (29,574 element sets), Terra (33,164), GOCE (4,607).
+Pulled from Space-Track on 11 November 2026: 82,623 element sets across Envisat, Terra, Aura and GOCE. **4 of 4 classified correctly.**
 
-**The premise holds.** Envisat lost contact on 8 April 2012, the first week of Q2. Its manoeuvre frequency collapses in exactly that quarter: 0.251 before, 0.018 after, with monotonic decay beginning immediately.
+| Satellite | Expected | Detected | Baseline | Decline | Error |
+|---|---|---|---|---|---|
+| Envisat | failure | `failed_abrupt` | 0.212 | 1 quarter | **−7 days** |
+| Terra | not a failure | `maintenance_ended_gradual` | 0.089 | 8 quarters | — |
+| Aura | not a failure | `maintenance_ended_gradual` | 0.072 | 6 quarters | — |
+| GOCE | abstain | `abstain` (below altitude floor) | — | — | — |
+
+![Detector validation](data/figures/detector_validation.png)
+
+**The premise holds.** Envisat lost contact on 8 April 2012, the first week of Q2. Its manoeuvre frequency collapses in exactly that quarter: 0.251 before, 0.018 after, with monotonic decay beginning immediately. The detector dates cessation to 1 April 2012 — the quarter boundary, and the finest resolution a quarterly series can give.
 
 **But the original threshold was wrong by ~20×.** The first detector looked for orbit-raising burns above 0.3 km. Envisat's real burns move semi-major axis by about 0.016 km/day at the 99th percentile. That detector found *zero* manoeuvres across Envisat's entire operational life and would have discarded a documented failure as "never station-keeping." Frequency works where magnitude does not.
 
@@ -103,7 +112,16 @@ The legacy `tle` and `tle_latest` API classes were deprecated and return 404 as 
 
 ```bash
 pip install -r requirements.txt
-cp config.example.ini config.ini     # add Space-Track credentials
+
+# Reproduce the real-data validation (no credentials needed —
+# the aggregated quarterly series is committed)
+python scripts/run_real_validation.py
+
+# Full pipeline verification on synthetic data
+python scripts/pipeline_smoke_test.py
+
+# Re-pull from the API and validate end to end (needs credentials)
+cp config.example.ini config.ini
 python scripts/validate_detector.py
 ```
 
@@ -119,13 +137,12 @@ Register for free API access at [space-track.org](https://www.space-track.org/au
 - Stratified sampling and weekly decimation
 - KDE debris density estimation per shell per epoch
 - Frequency-based failure detection with per-satellite baselines and an abruptness test
-- Core assumption validated against real Envisat, Terra and GOCE data
+- Validated against real data: 4/4 documented satellites correct, Envisat dated to within 7 days
 - Counting-process panel assembly
 - Cox, Weibull and logistic model layer with PH assumption testing
 - 28 unit tests, calibrated to measured magnitudes
 
 **In progress**
-- Full validation run producing `detector_validation.png`
 - Population ingestion
 
 **Remaining**

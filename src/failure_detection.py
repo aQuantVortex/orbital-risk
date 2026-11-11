@@ -244,10 +244,71 @@ def detect_failure(
     if len(daily) < 90:
         return result(STATUS_ABSTAIN, reason="insufficient_history")
 
-    if float(daily["altitude_km"].median()) < min_altitude_km:
+    activity = quarterly_activity(daily)
+
+    return classify_activity(
+        activity,
+        norad_id=norad_id,
+        daily=daily,
+        baseline_quarters=baseline_quarters,
+        quiet_quarters=quiet_quarters,
+        drop_ratio=drop_ratio,
+        abrupt_quarters=abrupt_quarters,
+        min_baseline_frac=min_baseline_frac,
+        min_altitude_km=min_altitude_km,
+        min_quarters=min_quarters,
+    )
+
+
+def classify_activity(
+    activity,
+    norad_id,
+    daily=None,
+    baseline_quarters=8,
+    quiet_quarters=4,
+    drop_ratio=0.35,
+    abrupt_quarters=4,
+    min_baseline_frac=0.04,
+    min_altitude_km=400,
+    min_quarters=16,
+):
+    """
+    Decision logic, separated from the daily aggregation.
+
+    Takes an activity table with columns period, pos_frac, altitude_km
+    (the output of `quarterly_activity`) and returns a DetectionResult.
+
+    Kept separate so the classifier can be run against an activity table
+    computed elsewhere — for instance one aggregated at the data source
+    to avoid transferring millions of element sets — and so the decision
+    rules can be tested without synthesising daily traces.
+
+    `daily` is optional and only used to fit the post-cessation decay
+    slope, which is corroboration rather than part of the decision.
+    """
+
+    def result(status, **kwargs):
+        defaults = dict(
+            norad_id=norad_id,
+            status=status,
+            failed=(status == STATUS_FAILED),
+            failure_epoch=None,
+            baseline_pos_frac=None,
+            final_pos_frac=None,
+            transition_quarters=None,
+            decay_slope_km_per_day=None,
+            n_periods=len(activity),
+            reason=status,
+        )
+        defaults.update(kwargs)
+        return DetectionResult(**defaults)
+
+    if activity.empty:
+        return result(STATUS_ABSTAIN, reason="insufficient_history")
+
+    if float(activity["altitude_km"].median()) < min_altitude_km:
         return result(STATUS_ABSTAIN, reason="below_min_altitude")
 
-    activity = quarterly_activity(daily)
     n_periods = len(activity)
 
     if n_periods < min_quarters:
@@ -308,13 +369,14 @@ def detect_failure(
         cessation_index - above_before[-1] if len(above_before) else cessation_index
     )
 
-    # Decay slope after cessation, as corroboration.
-    post = daily[daily["date"] >= cessation_epoch]
-    if len(post) > 30:
-        days = (post["date"] - post["date"].iloc[0]).dt.days.values.astype(float)
-        slope = float(np.polyfit(days, post["altitude_km"].values, 1)[0])
-    else:
-        slope = None
+    # Decay slope after cessation, as corroboration. Only available when
+    # the daily series was supplied.
+    slope = None
+    if daily is not None and len(daily):
+        post = daily[daily["date"] >= cessation_epoch]
+        if len(post) > 30:
+            days = (post["date"] - post["date"].iloc[0]).dt.days.values.astype(float)
+            slope = float(np.polyfit(days, post["altitude_km"].values, 1)[0])
 
     status = STATUS_FAILED if transition <= abrupt_quarters else STATUS_WOUND_DOWN
     reason = (

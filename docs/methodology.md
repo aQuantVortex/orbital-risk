@@ -102,9 +102,20 @@ Curated records become the **validation set** rather than the training target. T
 | Aura (28376) | not a failure | Second operational control |
 | GOCE (34602) | `abstain` | At 255 km with continuous ion thrust, below the altitude floor |
 
-On synthetic traces with known ground truth, detection of abrupt failures achieves precision 0.96 and recall 0.88. Separation of gradual wind-downs succeeds in 6 of 15 cases, which is the open weakness noted above.
+**Result on real data: 4 of 4 correct.**
 
-Real measurements supporting these choices are recorded in `data/processed/validation_observations.csv`.
+| Satellite | Expected | Detected | Baseline | Decline | Error |
+|---|---|---|---|---|---|
+| Envisat | `failed_abrupt` | `failed_abrupt` | 0.212 | 1 quarter | −7 days |
+| Terra | `maintenance_ended_gradual` | `maintenance_ended_gradual` | 0.089 | 8 quarters | — |
+| Aura | not a failure | `maintenance_ended_gradual` | 0.072 | 6 quarters | — |
+| GOCE | `abstain` | `abstain` | — | — | — |
+
+The seven-day error on Envisat is the quarter boundary: the documented loss is 8 April 2012 and the detector dates cessation to 1 April, which is the finest resolution a quarterly series admits. Finer dating would need a monthly series, at the cost of a noisier frequency estimate.
+
+On synthetic traces with known ground truth, detection of abrupt failures achieves precision 0.96 and recall 0.88. Separation of gradual wind-downs succeeds in only 6 of 15 cases, which remains the open weakness: the real Envisat–Terra gap (1 quarter versus 8) is wide enough to separate cleanly, but the synthetic cases are harder than the real ones, and the statistic is not yet robust across the full range.
+
+Reproduce with `python scripts/run_real_validation.py`. Supporting measurements are in `data/processed/validation_observations.csv` and the full aggregated series in `data/processed/real_quarterly_activity.csv`.
 
 ---
 
