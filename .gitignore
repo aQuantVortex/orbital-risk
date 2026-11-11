@@ -1,0 +1,16 @@
+config.ini
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store
+
+# Data is re-derivable from the API; only figures and small summaries are tracked.
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/*.csv
+
+.pytest_cache/
