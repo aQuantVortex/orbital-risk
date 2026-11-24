@@ -14,3 +14,4 @@ data/processed/*
 !data/processed/*.csv
 
 .pytest_cache/
+!data/processed/raw_population_packed.txt
