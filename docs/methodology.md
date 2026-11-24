@@ -62,6 +62,28 @@ Element sets are first collapsed to one median altitude per day, since individua
 
 Envisat ran at 0.25 and Terra at 0.09, both while fully maintained. No absolute threshold separates them, so each satellite's baseline is taken from its own early history (default eight quarters), and cessation is defined relative to that baseline.
 
+### The noise-dominated regime
+
+The statistic assumes drag reliably pushes altitude down each day, so a
+positive day signals a manoeuvre. That requires the daily decay to exceed
+the observation noise. Where it does not, roughly half of all days read
+positive whether the satellite is alive or dead, and the sign carries no
+information.
+
+This is not hypothetical. Running the detector across the real population
+surfaced it immediately: several long-dead 1960s-80s payloads in the
+1000-1500 km shells returned baselines of 0.46-0.61. At those altitudes
+drag is of order 0.0001 km/day, well below element-set noise. Read
+naively, those satellites look like vigorous station-keepers.
+
+Real maintained satellites sit far lower -- Envisat 0.21, Terra 0.09,
+Aura 0.07 -- so a baseline above 0.45 is diagnostic of noise rather than
+of unusually busy operations. The detector abstains with reason
+`noise_dominated`.
+
+Finding this also corrected a synthetic test that had used a 0.40
+maintenance rate, which no observed satellite approaches.
+
 ### Cessation is not the same as failure
 
 Terra (NORAD 25994) is operational in 2026 — instruments working, data downlinked — but NASA ended its orbit maintenance around 2020 and let it drift from its 10:30 mean local time. Its positive-delta fraction reads 0.019 in 2021 and 0.000 in 2026, which on the frequency statistic alone is indistinguishable from a dead satellite.
@@ -119,17 +141,45 @@ Reproduce with `python scripts/run_real_validation.py`. Supporting measurements 
 
 ---
 
+### Running detection at the source
+
+Classifying a few hundred satellites from raw element sets means moving
+tens of millions of records to derive a few hundred summary rows. The
+detector is therefore split in two: `quarterly_activity` aggregates daily
+medians into the quarterly series, and `classify_activity` applies the
+decision rules to that series. Only the second half needs to run where the
+analysis lives.
+
+For the population run the aggregation was performed at the data source
+and the per-satellite verdicts returned in compact form, decoded by
+`scripts/decode_population.py`. `src/panel_summary.py` then builds the
+identical counting-process panel from those summaries.
+`scripts/validate_detector.py` still performs the whole chain locally from
+the API, so the split is an optimisation rather than a different method.
+
 ## 5. Panel construction
 
-Output is **counting-process format**: one row per satellite per quarter, as `(t_start, t_stop, event]`.
+Output is **counting-process format**: one row per satellite per quarter,
+as `(t_start, t_stop]`.
 
-This is what makes time-varying covariates possible. Debris density around a satellite launched in 2012 is not what it was at launch, and freezing it to a single value discards the variable the study is about.
+This is what makes time-varying covariates possible. Debris density around
+a satellite launched in 2012 is not what it was at launch, and freezing it
+to a single value discards the variable the study is about.
 
-Satellites still operating at the study end are **right-censored**: their final row carries `event = 0`, recording that they survived at least that long rather than that they never fail.
+The window starts at 2004Q4. NOAA's observed solar-cycle file reports
+F10.7 as `-1` before October 2004, and imputing a covariate across eleven
+quarters is worse than shortening the window. Detection baselines still
+use each satellite's full history; only the modelling window is clipped.
 
-Covariates: shell debris density (time-varying), F10.7 solar flux (time-varying), spacecraft age, altitude, inclination band, mass class.
+**Censoring follows the detector's verdict**, and this is the substantive
+decision in the module:
 
----
+| Verdict | Panel treatment |
+|---|---|
+| `failed_abrupt` | `event = 1` on the final row. A genuine failure. |
+| `maintenance_ended_gradual` | **Censored** at cessation. The spacecraft was still operational when orbit maintenance stopped, so it is observed to that point and unknown after. Counting it as a failure would import the Terra error straight into the model. |
+| `active` | Censored at study end. |
+| `abstain` | Excluded. The detector formed no view, and inventing one is worse than dropping the satellite. |
 
 ## 6. Models
 

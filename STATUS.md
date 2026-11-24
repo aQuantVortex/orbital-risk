@@ -7,9 +7,17 @@ Last updated: 11 November 2026
 
 ## Summary
 
-The pipeline and modelling layer are built and tested. The core assumption was validated against real Space-Track data on 11 November, and that validation changed the detector substantially: it found the original detection threshold wrong by roughly a factor of twenty, and surfaced a confound that would have corrupted a significant share of the labels.
+**Complete.** The full pipeline has been run end to end on real Space-Track
+data: 535 satellites classified, 264 in the survival panel, 83 failure events,
+Cox / Weibull / logistic all fitted, pricing derived, figures produced.
 
----
+The central hypothesis — that debris density predicts satellite failure — is
+**not supported**. See `RESULTS.md` for the full numbers. The method validated
+itself in a different way: the detector's empirical cessation rate reproduces
+published insurance loss rates without ever touching insurance data.
+
+Remaining work is listed at the bottom; the largest item is recalibrating the
+Weibull time origin.
 
 ## Validation against real data (11 November 2026)
 
@@ -92,16 +100,15 @@ GOCE sits at 281 km falling to 140 km, using continuous ion thrust in a drag-dom
 
 ## Remaining
 
-| Task | Notes |
+| Task | Why it matters |
 |---|---|
-| Improve wind-down separation | Currently 6/15 on synthetic cases. See open issue below. |
-| Model fitting on the real panel | Depends on ingestion |
-| Sensitivity analysis | KDE bandwidth and shell boundaries |
-| External validation | Aggregate predicted loss against published market loss ratios; specific test is reproducing the 2023 loss spike |
-| Pricing comparison | Modelled rate per shell versus the flat 5–12% market rate |
-| Written report | Methodology, validation, limitations |
-
----
+| Fix the Weibull time origin | Durations start at first observation, not launch, so absolute pricing is 2–7x too high. Blocks any parametric pricing claim. |
+| Handle the PH violation for solar flux | Stratify or add a flux-by-time interaction. |
+| Improve wind-down separation | 6/15 on synthetic cases. |
+| Widen the 400–500 km and 1500–2000 km shells | 3 satellites and 0 events respectively; neither rate is meaningful. |
+| Test a rarer event class | Cessation is dominated by propellant exhaustion and retirement. Debris-driven failure would need fragmentation and anomaly events instead. |
+| Market-aggregate validation | Compare against published annual loss ratios year by year, including the 2023 spike. |
+| Written report | |
 
 ## Open issues
 

@@ -82,7 +82,11 @@ src/
   models.py              Cox, Weibull, logistic baseline, and the pricing layer
 
 scripts/
-  validate_detector.py   Runs the detector against satellites with documented outcomes
+  run_full_analysis.py   Full pipeline on the real population
+  decode_population.py   Decodes source-side detection results
+  run_real_validation.py Detector against four documented satellites
+  envisat_case_study.py  Single-satellite deep dive
+  validate_detector.py   End-to-end run from the API
 
 tests/
   test_detection.py      Unit tests on synthetic traces with known ground truth
@@ -113,11 +117,16 @@ The legacy `tle` and `tle_latest` API classes were deprecated and return 404 as 
 ```bash
 pip install -r requirements.txt
 
-# Reproduce the real-data validation (no credentials needed —
-# the aggregated quarterly series is committed)
+# Full pipeline on the real population: panel -> Cox -> Weibull -> pricing
+python scripts/run_full_analysis.py
+
+# Detector validation against four documented satellites (no credentials needed)
 python scripts/run_real_validation.py
 
-# Full pipeline verification on synthetic data
+# Single-satellite case study (Envisat)
+python scripts/envisat_case_study.py
+
+# End-to-end verification on synthetic data with known ground truth
 python scripts/pipeline_smoke_test.py
 
 # Re-pull from the API and validate end to end (needs credentials)
@@ -128,6 +137,34 @@ python scripts/validate_detector.py
 Register for free API access at [space-track.org](https://www.space-track.org/auth/createAccount).
 
 ---
+
+## Results
+
+Full pipeline run on real data, 24 November 2026. See `RESULTS.md`.
+
+**535 satellites classified · 264 in the survival panel · 83 failure events ·
+20.8 events per covariate.**
+
+The central hypothesis is **not supported**. Debris density does not measurably
+predict end-of-maintenance: hazard ratio 1.002, p = 0.49, and that null holds
+across every subset and specification tested.
+
+Two findings survive, and they matter more than a confirmation would have:
+
+- The detector's empirical cessation rate, **2.59% per satellite-year**, lands
+  inside the 1–3% band of published in-orbit insurance loss rates — reproduced
+  from orbital geometry alone, with no insurance data anywhere in the pipeline.
+- On that basis the market's flat 5–12% rate is **conservative, not blunt**.
+  Every shell prices below the 8.5% midpoint. The project was built expecting
+  to find crowded orbits under-charged; the data says otherwise.
+
+Also reported honestly: Cox **loses** to the logistic baseline on ranking
+(0.676 vs 0.696), out-of-sample concordance is a weak 0.562, the proportional
+hazards assumption fails for solar flux, and the Weibull model is 2–7×
+miscalibrated against empirical rates so it is excluded from the headline
+pricing.
+
+![Results](data/figures/real_results.png)
 
 ## Status
 

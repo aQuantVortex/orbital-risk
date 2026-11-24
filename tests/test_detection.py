@@ -241,8 +241,14 @@ class TestFailureDetection:
         result = detect_failure(trace)
         assert result.failed, f"missed cessation at noise={noise}"
 
-    @pytest.mark.parametrize("burn_prob", [0.12, 0.25, 0.40])
+    @pytest.mark.parametrize("burn_prob", [0.12, 0.25, 0.35])
     def test_robust_across_maintenance_rates(self, burn_prob):
+        """
+        Rates span what real maintained satellites actually show: Envisat
+        0.21, Terra 0.09, Aura 0.07 measured from Space-Track. An earlier
+        version of this test used 0.40, which no observed satellite
+        approaches and which now trips the noise-dominated guard.
+        """
         trace = synth_trace(
             n_days=3650, cessation_day=1825, burn_prob=burn_prob, seed=13
         )
@@ -300,6 +306,28 @@ class TestKnownLimitations:
 
         result = detect_failure(noisy_dead)
         assert not result.failed, "detector should not claim a failure it cannot see"
+
+    def test_abstains_when_baseline_is_noise(self):
+        """
+        Above ~1000 km drag is so weak that observation noise decides the
+        sign of the daily change, and pos_frac sits near 0.5 whether the
+        satellite is alive or dead. Found in real Space-Track data: several
+        long-dead 1960s-70s payloads in the 1000-1200 km shell returned
+        baselines of 0.46-0.54, which the detector would otherwise have
+        read as vigorous station-keeping.
+
+        Real maintained satellites sit far lower: Envisat 0.21, Terra 0.09.
+        """
+        noisy = synth_trace(
+            n_days=3650, cessation_day=None, decay_km_per_day=0.0002,
+            noise_km=0.004, burn_prob=0.0, seed=23,
+        )
+        frac, _ = positive_delta_fraction(daily_series(noisy))
+        assert frac > 0.45, f"expected a noise-dominated baseline, got {frac:.3f}"
+
+        result = detect_failure(noisy)
+        assert result.status == STATUS_ABSTAIN
+        assert result.reason == "noise_dominated"
 
     def test_cannot_distinguish_drift_from_death_without_abruptness(self):
         """

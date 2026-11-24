@@ -278,6 +278,63 @@ def evaluate_cox(model, panel, covariates=None):
     return concordance_index(collapsed["duration"], -risk, collapsed["event"])
 
 
+def evaluate_logistic(model, scaler, panel, covariates=None):
+    """
+    Score the logistic baseline on the SAME task as Cox: ranking.
+
+    The two models answer different questions by construction -- Cox gives
+    a hazard, logistic gives a one-year probability -- so comparing their
+    native outputs is meaningless. What is comparable is how well each
+    orders satellites by risk, which is what concordance measures. This
+    collapses the panel the same way `evaluate_cox` does and scores the
+    logistic risk score against the same durations and events.
+    """
+    covariates = covariates or DEFAULT_COVARIATES
+
+    collapsed = (
+        panel.groupby("norad_id")
+        .agg(
+            duration=("t_stop", "max"),
+            event=("event", "max"),
+            **{c: (c, "mean") for c in covariates},
+        )
+        .reset_index()
+        .dropna()
+    )
+
+    if model is None or collapsed["event"].sum() < 2:
+        return np.nan
+
+    risk = model.predict_proba(scaler.transform(collapsed[covariates].values))[:, 1]
+    return concordance_index(collapsed["duration"], -risk, collapsed["event"])
+
+
+def kaplan_meier_by_group(panel, group_col="shell", min_events=3):
+    """
+    Empirical survival curves per group, with no model in between.
+
+    The Weibull curves show what the fitted model believes. These show what
+    the data actually did, which is the more honest exhibit and the right
+    place to look for a group the parametric form is handling badly.
+    """
+    from lifelines import KaplanMeierFitter
+
+    collapsed = (
+        panel.groupby(["norad_id", group_col])
+        .agg(duration=("t_stop", "max"), event=("event", "max"))
+        .reset_index()
+    )
+
+    curves = {}
+    for group, sub in collapsed.groupby(group_col):
+        if sub["event"].sum() < min_events:
+            continue
+        kmf = KaplanMeierFitter()
+        kmf.fit(sub["duration"], sub["event"], label=str(group))
+        curves[group] = kmf
+    return curves, collapsed
+
+
 def bandwidth_sensitivity(panel_builder, bandwidths):
     """
     Refit across KDE bandwidths and report coefficient stability.

@@ -183,6 +183,7 @@ def detect_failure(
     drop_ratio=0.35,
     abrupt_quarters=4,
     min_baseline_frac=0.04,
+    max_baseline_frac=0.45,
     min_altitude_km=400,
     min_quarters=16,
 ):
@@ -212,6 +213,11 @@ def detect_failure(
     min_baseline_frac : float
         If the satellite never showed this much activity, it was never
         station-keeping and the detector abstains.
+    max_baseline_frac : float
+        Upper guard. A baseline near 0.5 means observation noise, not
+        manoeuvres, is deciding the sign of the daily change, so the
+        statistic is uninformative and the detector abstains. Observed in
+        real data above ~1000 km where drag is weakest.
     min_altitude_km : float
         Below this, drag decay is rapid regardless of health and some
         craft use continuous low thrust, so the detector abstains.
@@ -255,6 +261,7 @@ def detect_failure(
         drop_ratio=drop_ratio,
         abrupt_quarters=abrupt_quarters,
         min_baseline_frac=min_baseline_frac,
+        max_baseline_frac=max_baseline_frac,
         min_altitude_km=min_altitude_km,
         min_quarters=min_quarters,
     )
@@ -269,6 +276,7 @@ def classify_activity(
     drop_ratio=0.35,
     abrupt_quarters=4,
     min_baseline_frac=0.04,
+    max_baseline_frac=0.45,
     min_altitude_km=400,
     min_quarters=16,
 ):
@@ -323,6 +331,23 @@ def classify_activity(
             STATUS_ABSTAIN,
             reason="no_station_keeping",
             baseline_pos_frac=baseline if np.isfinite(baseline) else None,
+            n_periods=n_periods,
+        )
+
+    # Noise-dominated regime. The statistic assumes drag reliably pushes
+    # altitude down each day, so a positive day signals a manoeuvre. Where
+    # observation noise exceeds the daily decay, roughly half of all days
+    # read positive whether or not the satellite is alive, and the sign
+    # carries no information. That is what a baseline near 0.5 means.
+    #
+    # This showed up in real data above ~1000 km, where decay is slowest:
+    # several long-dead 1960s-70s payloads returned baselines of 0.46-0.54.
+    # The detector abstains rather than reading noise as station-keeping.
+    if baseline > max_baseline_frac:
+        return result(
+            STATUS_ABSTAIN,
+            reason="noise_dominated",
+            baseline_pos_frac=baseline,
             n_periods=n_periods,
         )
 
