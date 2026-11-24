@@ -17,6 +17,17 @@ The consequence is a market that cannot measure the risk it underwrites. Fewer t
 
 ---
 
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [`REPORT.md`](REPORT.md) | Full project report — abstract, method, results, discussion, limitations |
+| [`RESULTS.md`](RESULTS.md) | Results in detail, with every number and caveat |
+| [`docs/CODE_WALKTHROUGH.md`](docs/CODE_WALKTHROUGH.md) | Every file explained, and why it is written that way |
+| [`docs/VIVA_PREP.md`](docs/VIVA_PREP.md) | Likely questions and answers, by assessment component |
+| [`docs/methodology.md`](docs/methodology.md) | Method in technical detail |
+| [`STATUS.md`](STATUS.md) | What is done, what remains |
+
 ## Approach
 
 ### Failure labels are derived, not inherited

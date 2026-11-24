@@ -166,6 +166,34 @@ work.
 
 ---
 
+## Sensitivity analysis
+
+Sixteen configurations, varying every discretionary choice in the pipeline.
+Reproduce with `python scripts/sensitivity_analysis.py`.
+
+**Shell boundaries** — baseline (10 shells), coarse (5 shells), fine (50 km
+bins below 1000 km), shifted +50 km, shifted −50 km.
+
+**Study window start** — 2004Q4, 2008Q1, 2012Q1, 2016Q1.
+
+**Population subsets** — all, launch ≥ 1995, launch ≥ 2005, altitude ≤ 1000 km,
+altitude 500–1000 km, LARGE mass class only, excluding gradual wind-downs.
+
+| | |
+|---|---|
+| Configurations fitted | 16 of 16 |
+| Hazard ratio range | 0.9976 – 1.0033 |
+| **Smallest p-value for density** | **0.360** |
+| Significant at p < 0.05 | **0 of 16** |
+| Concordance range | 0.451 – 0.699 |
+
+No shell binning, study window or population subset makes debris density a
+significant predictor. The null is robust.
+
+![Sensitivity](data/figures/sensitivity_analysis.png)
+
+---
+
 ## What this means
 
 **The project's method works; its hypothesis does not.**
