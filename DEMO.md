@@ -69,9 +69,10 @@ run `python scripts/analyse_satellite.py <ID> --history <file>.csv`.
 python -m pytest tests/ -q
 ```
 
-**Output:** `29 passed`
+**Output:** `51 passed`
 
-**Say:** "29 unit tests. Most check the detector behaves correctly, but two
+**Say:** "51 unit tests — 29 on the detector, 22 on the live path using real
+CelesTrak responses. Most check behaviour is correct, but two
 deliberately document where the method *breaks* — one confirms the statistic
 degrades when observation noise exceeds atmospheric drag, the other confirms
 that transition shape is the only thing separating a drifting satellite from

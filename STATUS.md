@@ -1,7 +1,7 @@
 # Project Status
 
 **Pricing Orbital Risk** — Foundations of Data Science
-Last updated: 11 November 2026
+Last updated: 24 November 2026
 
 ---
 
@@ -16,8 +16,9 @@ The central hypothesis — that debris density predicts satellite failure — is
 itself in a different way: the detector's empirical cessation rate reproduces
 published insurance loss rates without ever touching insurance data.
 
-Remaining work is listed at the bottom; the largest item is recalibrating the
-Weibull time origin.
+Remaining items are extensions, not gaps: they are listed at the bottom with the
+reason each matters. The largest is recalibrating the Weibull time origin, which
+is why the Weibull is excluded from the headline pricing.
 
 ## Validation against real data (11 November 2026)
 
@@ -86,15 +87,18 @@ GOCE sits at 281 km falling to 140 km, using continuous ion thrust in a drag-dom
 
 **Modelling.** Counting-process panel assembly; Cox proportional hazards with time-varying covariates; proportional hazards assumption testing; Weibull AFT for extrapolation; logistic baseline; temporal split and concordance evaluation; pricing layer.
 
-**Testing.** 28 unit tests, all passing, with synthetic magnitudes calibrated to the real measurements above rather than to guesses. Two tests document known breakdowns rather than asserting success.
+**Testing.** 51 unit tests, all passing (29 on the detector, 22 on the live single-satellite path), with synthetic magnitudes calibrated to the real measurements above rather than to guesses. Two tests document known breakdowns rather than asserting success.
 
 **Real validation.** 4 of 4 documented satellites classified correctly, with Envisat dated to within 7 days.
 
 ---
 
-## In progress
+## Also complete
 
-- **Population ingestion** — stratified pull across LEO shells
+- **Population run** — 535 satellites pulled and classified; 264 in the survival panel, 83 events
+- **Sensitivity analysis** — 16 configurations, density never significant (`scripts/sensitivity_analysis.py`)
+- **Written report** — `REPORT.md`, with `RESULTS.md`, `docs/CODE_WALKTHROUGH.md`, `docs/VIVA_PREP.md`
+- **Live single-satellite pipeline** — `scripts/analyse_satellite.py <NORAD_ID>`: CelesTrak catalogue and current orbit, Space-Track history, detector, cross-check against CelesTrak's status code, shell price
 
 ---
 
@@ -107,8 +111,7 @@ GOCE sits at 281 km falling to 140 km, using continuous ion thrust in a drag-dom
 | Improve wind-down separation | 6/15 on synthetic cases. |
 | Widen the 400–500 km and 1500–2000 km shells | 3 satellites and 0 events respectively; neither rate is meaningful. |
 | Test a rarer event class | Cessation is dominated by propellant exhaustion and retirement. Debris-driven failure would need fragmentation and anomaly events instead. |
-| Market-aggregate validation | Compare against published annual loss ratios year by year, including the 2023 spike. |
-| Written report | |
+| Year-by-year market validation | The pooled rate (2.59%/yr) matches the 1–3% loss-rate band; a year-by-year comparison, including the 2023 spike, is not done. |
 
 ## Open issues
 
@@ -136,10 +139,19 @@ src/failure_detection.py    Frequency-based labelling with abruptness test
 src/panel.py                Counting-process panel assembly
 src/models.py               Cox, Weibull, logistic, pricing layer
 
-scripts/validate_detector.py    Validation against documented outcomes
-scripts/pipeline_smoke_test.py  End-to-end verification
+src/celestrak.py            CelesTrak catalogue and current-orbit client
+src/panel_summary.py        Panel assembly from the population summary
 
-tests/test_detection.py         28 unit tests
+scripts/analyse_satellite.py    Any single satellite, live, seven steps
+scripts/run_full_analysis.py    Full pipeline on the real population
+scripts/sensitivity_analysis.py 16-configuration robustness check
+scripts/run_real_validation.py  Detector vs four documented satellites
+scripts/envisat_case_study.py   Single-satellite deep dive
+scripts/validate_detector.py    Validation re-pulled from the API
+scripts/pipeline_smoke_test.py  End-to-end verification on synthetic data
+
+tests/test_detection.py         29 unit tests (detector)
+tests/test_live_pipeline.py     22 unit tests (live path)
 docs/methodology.md             Method, assumptions, limitations
 data/processed/validation_observations.csv   Real measurements from 11 Nov
 ```

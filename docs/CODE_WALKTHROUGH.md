@@ -4,7 +4,7 @@ Every file, what it does, and why it is written the way it is. Read this
 before the viva — if you can explain each section here in your own words you
 can answer anything asked about the implementation.
 
-Total: ~2,900 lines of Python across 8 modules, 6 scripts and 29 tests.
+Total: ~2,900 lines of Python across 8 modules, 8 scripts and 51 tests.
 
 ---
 
@@ -367,6 +367,64 @@ independence implies. That correlation is why capacity flees after a bad year.
 It verifies the whole chain on synthetic satellites with known failure times
 **before** spending API quota. It is also where both modelling bugs above were
 caught — on real data they would have produced plausible but wrong results.
+
+---
+
+## The live path: one satellite, any NORAD ID
+
+### src/celestrak.py
+
+A small client for CelesTrak's two public endpoints: the catalogue record
+(`satcat`) and the current element set (`gp`). No account needed.
+
+- `altitude_from_mean_motion()` — CelesTrak's element sets give mean motion
+  (revolutions per day), not semi-major axis. Kepler's third law converts it:
+  n in rad/s, then a = (μ / n²)^(1/3) with μ = 398600.4418 km³/s², minus
+  Earth's radius 6378.137 km. Tested against CelesTrak's own apogee/perigee to
+  within 2 km for Envisat, Terra, the ISS and GOES 16.
+- `rcs_to_mass_class()` — radar cross-section to the same SMALL / MEDIUM /
+  LARGE buckets the population study used.
+- Every response is cached to `data/raw/celestrak/`, so the script still runs
+  with `--offline` if the network fails in class.
+
+**Why CelesTrak alone is not enough:** it publishes only the *current* orbit.
+The detector needs years of history to see station-keeping stop, so step 3
+goes to Space-Track `gp_history` — the same US Space Force catalogue that
+CelesTrak redistributes.
+
+### scripts/analyse_satellite.py
+
+Seven printed steps: catalogue → current orbit → history → detector →
+cross-check → risk and price → figure and JSON.
+
+- `load_history_file()` — the fallback when the login fails: accepts a
+  Space-Track Query Builder export (CSV or JSON), upper- or lower-case columns,
+  converts mean motion to semi-major axis if SMA is missing, and filters out
+  any other objects in the file.
+- `cross_check()` — compares the detector's verdict with CelesTrak's status
+  code. They answer different questions (*is the orbit maintained* versus
+  *is the spacecraft operating*), so agreement is defined by what each implies:
+  `failed_abrupt` agrees with `-` (non-operational); `maintenance_ended_gradual`
+  agrees with an operating code like `X` (extended mission) — the Terra case.
+- `score()` — places the satellite in its shell, reads the empirical cessation
+  rate for that shell from `real_pricing_comparison.csv`, loads it ×1.4 into a
+  premium, compares against the 8.5% market midpoint, and computes the Cox
+  relative hazard from the fitted coefficients. It refuses to price debris or
+  rocket bodies, gives no comparison below 400 km, and prints a **thin data**
+  warning when the shell had fewer than 10 satellites or 5 events.
+
+Out-of-scope cases stop with a reason rather than a number: above 2,000 km
+(no drag, so no signal), fewer than 16 quarters of history, no
+station-keeping ever seen.
+
+---
+
+## tests/test_live_pipeline.py (22 tests)
+
+Uses real CelesTrak responses captured on 24 November 2026 for deliberately
+awkward objects — a failed satellite, a decayed one, a geostationary one, a
+piece of debris. Checks the Kepler conversion against the catalogue, RCS
+bucketing, parsing, history-file loading, and every branch of the cross-check.
 
 ---
 

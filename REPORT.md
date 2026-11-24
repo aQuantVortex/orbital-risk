@@ -597,7 +597,7 @@ python scripts/run_full_analysis.py       # full pipeline, real data
 python scripts/sensitivity_analysis.py    # 16-configuration robustness
 python scripts/envisat_case_study.py      # single-satellite deep dive
 python scripts/pipeline_smoke_test.py     # synthetic end-to-end check
-python -m pytest tests/ -q                # 29 tests
+python -m pytest tests/ -q                # 51 tests
 ```
 
 Only `scripts/validate_detector.py` requires Space-Track credentials; every

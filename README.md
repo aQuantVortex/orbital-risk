@@ -92,8 +92,10 @@ src/
   failure_detection.py   Changepoint detection for end-of-life labelling
   panel.py               Counting-process panel assembly (one row per satellite-period)
   models.py              Cox, Weibull, logistic baseline, and the pricing layer
+  celestrak.py           CelesTrak catalogue + current orbit (altitude via Kepler)
 
 scripts/
+  analyse_satellite.py   Any satellite by NORAD ID, live, seven steps
   run_full_analysis.py   Full pipeline on the real population
   decode_population.py   Decodes source-side detection results
   run_real_validation.py Detector against four documented satellites
@@ -101,7 +103,8 @@ scripts/
   validate_detector.py   End-to-end run from the API
 
 tests/
-  test_detection.py      Unit tests on synthetic traces with known ground truth
+  test_detection.py      Detector tests on synthetic traces with known ground truth
+  test_live_pipeline.py  Live-path tests on real CelesTrak responses
 
 docs/
   methodology.md         Method, assumptions, and limitations in detail
@@ -183,26 +186,12 @@ pricing.
 
 ## Status
 
-**Complete**
-- API access established and verified
-- Rate-limited client with disk caching
-- Stratified sampling and weekly decimation
-- KDE debris density estimation per shell per epoch
-- Frequency-based failure detection with per-satellite baselines and an abruptness test
-- Validated against real data: 4/4 documented satellites correct, Envisat dated to within 7 days
-- Counting-process panel assembly
-- Cox, Weibull and logistic model layer with PH assumption testing
-- 28 unit tests, calibrated to measured magnitudes
+**Complete.** Real-data pipeline run end to end, sensitivity analysis, written
+report, live single-satellite demo, and 51 passing unit tests.
 
-**In progress**
-- Population ingestion
-
-**Remaining**
-- Improving wind-down separation (currently 6/15 on synthetic cases)
-- Model fitting on the complete panel
-- Bandwidth and shell-boundary sensitivity analysis
-- Market-aggregate validation against published loss ratios
-- Pricing comparison and written report
+**Open extensions** — Weibull time origin (why it is excluded from pricing),
+the PH violation for solar flux, wind-down separation (6/15 on synthetic
+cases), and a year-by-year market comparison.
 
 Full detail in `STATUS.md`.
 
