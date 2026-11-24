@@ -143,19 +143,34 @@ Reproduce with `python scripts/run_real_validation.py`. Supporting measurements 
 
 ### Running detection at the source
 
-Classifying a few hundred satellites from raw element sets means moving
+Classifying several hundred satellites from raw element sets means moving
 tens of millions of records to derive a few hundred summary rows. The
 detector is therefore split in two: `quarterly_activity` aggregates daily
 medians into the quarterly series, and `classify_activity` applies the
 decision rules to that series. Only the second half needs to run where the
 analysis lives.
 
-For the population run the aggregation was performed at the data source
-and the per-satellite verdicts returned in compact form, decoded by
-`scripts/decode_population.py`. `src/panel_summary.py` then builds the
-identical counting-process panel from those summaries.
-`scripts/validate_detector.py` still performs the whole chain locally from
-the API, so the split is an optimisation rather than a different method.
+**What this means in practice, stated precisely.** For the 535-satellite
+population run, the element-set retrieval, the daily-median collapse, the
+quarterly aggregation and the classification rules all executed at the data
+source, in an implementation mirroring `src/failure_detection.py`. What
+returned was one summary record per satellite, decoded by
+`scripts/decode_population.py` into `real_population_summary.csv`.
+
+Everything downstream of that file — panel construction, Cox, Weibull, the
+logistic baseline, pricing and the sensitivity analysis — is the committed
+Python running on committed data, and reproduces from a clean clone.
+
+The Python detector itself is verified independently rather than assumed
+equivalent: `scripts/run_real_validation.py` runs `classify_activity` on the
+real quarterly series for Envisat, Terra, Aura and GOCE and reproduces 4/4
+documented outcomes, including Envisat to within seven days. Those four
+series are committed in `real_quarterly_activity.csv`, so that verification
+also reproduces from a clean clone.
+
+`scripts/validate_detector.py` performs the entire chain locally from the API
+when credentials are supplied, so the split is an optimisation under a rate
+limit rather than a different method.
 
 ## 5. Panel construction
 

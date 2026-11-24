@@ -301,6 +301,23 @@ records rather than maintenance cessations. That measures the phenomenon the
 hypothesis is actually about. The trade is a much smaller sample, and the
 events-per-covariate constraint would bind hard.
 
+**"Show me the code that produced those 93 events."**
+`src/failure_detection.py` holds the rules. For the population run the
+retrieval and classification executed at the data source under the API's
+rate limit, in an implementation mirroring that module, and what came back
+was one summary row per satellite — that is `real_population_summary.csv`,
+decoded by `scripts/decode_population.py`.
+
+Everything downstream of that file is the committed Python on committed data
+and reproduces from a clean clone. And the Python detector is verified
+independently, not assumed equivalent: `run_real_validation.py` runs
+`classify_activity` on the real quarterly series for four documented
+satellites and reproduces 4/4, Envisat to within seven days.
+
+If you want the whole chain run locally, `validate_detector.py` does that
+from the API with credentials — it is slower, which is exactly why the split
+exists.
+
 **"Did you use AI to build this?"**
 Answer honestly, however you did it. What you must be able to do is explain
 every design decision in this document — why median not mean, why frequency

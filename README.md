@@ -21,6 +21,7 @@ The consequence is a market that cannot measure the risk it underwrites. Fewer t
 
 | Document | Purpose |
 |---|---|
+| [`DEMO.md`](DEMO.md) | Live demo runbook — what to run, in what order, what it prints |
 | [`REPORT.md`](REPORT.md) | Full project report — abstract, method, results, discussion, limitations |
 | [`RESULTS.md`](RESULTS.md) | Results in detail, with every number and caveat |
 | [`docs/CODE_WALKTHROUGH.md`](docs/CODE_WALKTHROUGH.md) | Every file explained, and why it is written that way |
