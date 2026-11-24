@@ -124,9 +124,18 @@ class SpaceTrackClient:
         self.limiter.acquire()
         url = f"{QUERY_URL}/{path}"
         LOGGER.info("GET %s", url)
-        response = self.session.get(url, timeout=120)
+        # Long histories (the ISS, early Soviet payloads) can run to tens of
+        # thousands of element sets, so the read timeout is generous.
+        response = self.session.get(url, timeout=600)
         response.raise_for_status()
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as error:
+            # An expired session returns the HTML login page rather than JSON.
+            raise RuntimeError(
+                "Space-Track returned a non-JSON response. The session has "
+                "probably expired or the credentials in config.ini are wrong."
+            ) from error
 
         if cache_key:
             with open(self.cache_dir / f"{cache_key}.json", "w") as handle:
@@ -141,9 +150,14 @@ class SpaceTrackClient:
         Returns a DataFrame with EPOCH parsed to datetime and the numeric
         orbital columns cast to float.
         """
+        # Only the columns the pipeline uses. A full gp_history record has
+        # ~40 fields; requesting four cuts the download by roughly ten times,
+        # which matters for long-lived objects.
         path = (
             f"class/gp_history/NORAD_CAT_ID/{norad_id}"
-            f"/orderby/EPOCH asc/format/json"
+            f"/orderby/EPOCH asc"
+            f"/predicates/NORAD_CAT_ID,EPOCH,SEMIMAJOR_AXIS,BSTAR"
+            f"/format/json"
         )
         cache_key = f"gp_history_{norad_id}" if use_cache else None
         frame = self.query(path, cache_key=cache_key)

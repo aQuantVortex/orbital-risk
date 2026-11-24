@@ -15,6 +15,52 @@ No credentials needed for anything below.
 
 ---
 
+## If he asks you to run a satellite he picks ← **most likely test**
+
+```bash
+python scripts/analyse_satellite.py <NORAD_ID>
+```
+
+Let him choose the number — from CelesTrak's search page, anywhere. The
+script runs the whole pipeline on that one object, live, in seven printed
+steps, and writes `data/figures/satellites/<NORAD_ID>.png`.
+
+**Needs `config.ini`** with your Space-Track login for step 3. Set it up and
+run it once **the night before** so you know the login works on your laptop.
+
+What each step shows, and what to say:
+
+| Step | Shows | Say |
+|---|---|---|
+| 1. CelesTrak catalogue | Name, owner, launch/decay, orbit, size, status code | "Catalogue record, no account needed." |
+| 2. CelesTrak current orbit | Today's element set, altitude from mean motion | "Altitude comes from Kepler's third law on the mean motion." |
+| 3. Space-Track history | Element-set count and span | "**CelesTrak only publishes the current orbit.** The detector needs years of history, so this comes from Space-Track — the same US Space Force catalogue CelesTrak redistributes." |
+| 4. Detector | Baseline, cut-off, verdict, and a bar chart of quarters around any transition | Walk through the bars — you can *see* the drop. |
+| 5. Cross-check | Detector verdict vs CelesTrak's own status code | "An independent check. CelesTrak reports whether it operates; my detector reports whether its orbit is maintained. Here's whether they agree." |
+| 6. Risk and price | Shell, debris density then vs now, empirical rate, premium vs market | Point out any **thin data** warning yourself. |
+| 7. Outputs | Figure and JSON report paths | Open the figure. |
+
+### Whatever he picks, the script has an honest answer
+
+| He picks | What happens | Why that's right |
+|---|---|---|
+| A working LEO satellite | Full run, verdict `active`, priced | The normal case |
+| A dead LEO satellite | `failed_abrupt` with cessation date, cross-check vs CelesTrak | The method's core purpose |
+| An old science satellite (Terra, Aura) | `maintenance_ended_gradual`, CelesTrak says operating → **AGREE** | The construct-validity case |
+| A GEO / MEO satellite | Stops at step 3: out of scope | No atmospheric drag up there, so the signal doesn't exist |
+| Debris or a rocket body | Detector abstains, **no price** | No propulsion; nobody insures debris |
+| A decayed satellite | No current orbit; history still analysed | Re-entered objects still have history |
+| The ISS | Priced, with a **thin data** warning | Its shell had only 3 satellites in the study |
+| Anything launched in the last ~4 years | Abstains: `insufficient_quarters` | Needs 16 quarters to set a baseline and see a change |
+| A Starlink | Runs, with a note it was excluded from the study population | Mega-constellations were stratified out |
+| A number that doesn't exist | Clean error: no catalogue record | — |
+
+**If the Space-Track login fails in class:** export the history from
+Space-Track's Query Builder (class `gp_history`, the NORAD ID, format CSV) and
+run `python scripts/analyse_satellite.py <ID> --history <file>.csv`.
+
+---
+
 ## Run order
 
 ### 1. Tests — 1 second

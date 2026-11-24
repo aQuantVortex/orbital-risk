@@ -301,6 +301,18 @@ records rather than maintenance cessations. That measures the phenomenon the
 hypothesis is actually about. The trade is a much smaller sample, and the
 events-per-covariate constraint would bind hard.
 
+**"Pull this satellite from CelesTrak and run it through."**
+`python scripts/analyse_satellite.py <NORAD>`. Say up front what will happen:
+CelesTrak gives the catalogue record and the current orbit, but it doesn't
+publish history — and the detector needs years of it to set a baseline and
+see a change. So step 3 pulls the history from Space-Track, the same US Space
+Force catalogue CelesTrak redistributes. Then detector, cross-check against
+CelesTrak's own status code, and pricing against the fitted model.
+
+If he picks something out of scope — GEO, debris, something launched last
+year — the script says why it can't be analysed rather than producing a
+number. Treat that as a feature: a method that knows its own domain.
+
 **"Show me the code that produced those 93 events."**
 `src/failure_detection.py` holds the rules. For the population run the
 retrieval and classification executed at the data source under the API's

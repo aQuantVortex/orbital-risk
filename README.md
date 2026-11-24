@@ -129,6 +129,9 @@ The legacy `tle` and `tle_latest` API classes were deprecated and return 404 as 
 ```bash
 pip install -r requirements.txt
 
+# Any satellite, live: CelesTrak + Space-Track -> detector -> price
+python scripts/analyse_satellite.py 25994
+
 # Full pipeline on the real population: panel -> Cox -> Weibull -> pricing
 python scripts/run_full_analysis.py
 

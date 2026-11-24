@@ -15,3 +15,11 @@ data/processed/*
 
 .pytest_cache/
 !data/processed/raw_population_packed.txt
+
+# Per-satellite run outputs from analyse_satellite.py
+data/figures/satellites/
+data/processed/satellites/
+
+# Real CelesTrak responses kept so --offline works from a clean clone
+!data/raw/celestrak/
+!data/raw/celestrak/**
