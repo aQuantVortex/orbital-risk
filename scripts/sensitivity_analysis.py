@@ -6,13 +6,18 @@ A result that moves when an arbitrary choice moves was never a result. This
 script varies every discretionary parameter in the pipeline and reports
 whether the conclusions hold.
 
-Four families of choice are tested:
+Three families of choice are tested:
 
   1. Shell boundaries      -- where the altitude bins are drawn
-  2. Detector thresholds   -- drop ratio, quiet period, baseline window,
-                              abruptness cut, noise guard
-  3. Study window          -- when the modelling period starts
-  4. Population subsets    -- launch era and altitude range
+  2. Study window          -- when the modelling period starts
+  3. Population subsets    -- launch era, altitude range, size, and
+                              excluding gradual wind-downs
+
+Detector thresholds (drop ratio, quiet period, baseline window) are NOT
+varied here: the population verdicts were computed at the data source, so
+re-running the detector at other thresholds needs a fresh pull. The
+detector's own robustness is covered by tests/test_detection.py
+(cessation timing, noise, maintenance rate) and by the 4/4 validation.
 
 The headline claim under test is the density null: that debris density does
 not predict end-of-maintenance. A null is only interesting if it is robust,
