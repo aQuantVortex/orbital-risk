@@ -358,6 +358,6 @@ excluded from pricing. That is what the viva tests.
 | Envisat pos_frac before / after failure | 0.251 / 0.018 |
 | Envisat detection error | −7 days |
 | Detector validation | 4/4 |
-| Unit tests | 51 (29 detector, 22 live path) |
+| Unit tests | 53 (29 detector, 24 live path) |
 | Real manoeuvre magnitude | 0.016 km/day at p99 |
 | Original (wrong) threshold | 0.3 km — 20× too large |

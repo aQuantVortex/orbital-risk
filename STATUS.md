@@ -87,7 +87,7 @@ GOCE sits at 281 km falling to 140 km, using continuous ion thrust in a drag-dom
 
 **Modelling.** Counting-process panel assembly; Cox proportional hazards with time-varying covariates; proportional hazards assumption testing; Weibull AFT for extrapolation; logistic baseline; temporal split and concordance evaluation; pricing layer.
 
-**Testing.** 51 unit tests, all passing (29 on the detector, 22 on the live single-satellite path), with synthetic magnitudes calibrated to the real measurements above rather than to guesses. Two tests document known breakdowns rather than asserting success.
+**Testing.** 53 unit tests, all passing (29 on the detector, 24 on the live single-satellite path), with synthetic magnitudes calibrated to the real measurements above rather than to guesses. Two tests document known breakdowns rather than asserting success.
 
 **Real validation.** 4 of 4 documented satellites classified correctly, with Envisat dated to within 7 days.
 
@@ -151,7 +151,7 @@ scripts/validate_detector.py    Validation re-pulled from the API
 scripts/pipeline_smoke_test.py  End-to-end verification on synthetic data
 
 tests/test_detection.py         29 unit tests (detector)
-tests/test_live_pipeline.py     22 unit tests (live path)
+tests/test_live_pipeline.py     24 unit tests (live path)
 docs/methodology.md             Method, assumptions, limitations
 data/processed/validation_observations.csv   Real measurements from 11 Nov
 ```

@@ -330,7 +330,11 @@ def main():
         history = history.copy()
         history["NORAD_CAT_ID"] = norad
         history["altitude_km"] = history["SEMIMAJOR_AXIS"] - EARTH_RADIUS_KM
-        kv("Element sets", f"{len(history):,}")
+        days = pd.to_datetime(history["EPOCH"]).dt.normalize().nunique()
+        if days == len(history):
+            kv("Records", f"{len(history):,}  (one per day — daily medians)")
+        else:
+            kv("Element sets", f"{len(history):,}")
         kv("Span", f"{fmt_date(history['EPOCH'].min())} to "
                    f"{fmt_date(history['EPOCH'].max())}")
         kv("Altitude, first → last", f"{history['altitude_km'].iloc[0]:.1f} → "

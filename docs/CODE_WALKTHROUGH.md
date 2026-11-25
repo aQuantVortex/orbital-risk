@@ -4,7 +4,7 @@ Every file, what it does, and why it is written the way it is. Read this
 before the viva — if you can explain each section here in your own words you
 can answer anything asked about the implementation.
 
-Total: ~2,900 lines of Python across 8 modules, 8 scripts and 51 tests.
+Total: ~2,900 lines of Python across 8 modules, 8 scripts and 53 tests.
 
 ---
 
@@ -419,7 +419,7 @@ station-keeping ever seen.
 
 ---
 
-## tests/test_live_pipeline.py (22 tests)
+## tests/test_live_pipeline.py (24 tests)
 
 Uses real CelesTrak responses captured on 24 November 2026 for deliberately
 awkward objects — a failed satellite, a decayed one, a geostationary one, a

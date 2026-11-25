@@ -187,7 +187,7 @@ pricing.
 ## Status
 
 **Complete.** Real-data pipeline run end to end, sensitivity analysis, written
-report, live single-satellite demo, and 51 passing unit tests.
+report, live single-satellite demo, and 53 passing unit tests.
 
 **Open extensions** — Weibull time origin (why it is excluded from pricing),
 the PH violation for solar flux, wind-down separation (6/15 on synthetic

@@ -55,9 +55,20 @@ What each step shows, and what to say:
 | A Starlink | Runs, with a note it was excluded from the study population | Mega-constellations were stratified out |
 | A number that doesn't exist | Clean error: no catalogue record | — |
 
-**If the Space-Track login fails in class:** export the history from
-Space-Track's Query Builder (class `gp_history`, the NORAD ID, format CSV) and
-run `python scripts/analyse_satellite.py <ID> --history <file>.csv`.
+**If the Space-Track login fails in class**, two fallbacks:
+
+1. **Envisat and Terra run with no login at all** — real history is committed
+   in `data/examples/`:
+   ```bash
+   python scripts/analyse_satellite.py 27386 --offline --history data/examples/27386_history.csv
+   python scripts/analyse_satellite.py 25994 --offline --history data/examples/25994_history.csv
+   ```
+   Envisat → `FAILED`, cessation 2012-04-01, AGREE. Terra → `MAINTENANCE ENDED
+   GRADUALLY` over 8 quarters, AGREE. Say: "the login's down, so here's the same
+   pipeline on history I pulled yesterday — same code path from step 3 on."
+2. **For a satellite he picks:** export the history from Space-Track's Query
+   Builder (class `gp_history`, the NORAD ID, format CSV) and run
+   `python scripts/analyse_satellite.py <ID> --history <file>.csv`.
 
 ---
 
@@ -69,9 +80,9 @@ run `python scripts/analyse_satellite.py <ID> --history <file>.csv`.
 python -m pytest tests/ -q
 ```
 
-**Output:** `51 passed`
+**Output:** `53 passed`
 
-**Say:** "51 unit tests — 29 on the detector, 22 on the live path using real
+**Say:** "53 unit tests — 29 on the detector, 24 on the live path using real
 CelesTrak responses. Most check behaviour is correct, but two
 deliberately document where the method *breaks* — one confirms the statistic
 degrades when observation noise exceeds atmospheric drag, the other confirms

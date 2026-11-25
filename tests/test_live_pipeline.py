@@ -185,3 +185,31 @@ class TestCrossCheck:
     def test_no_comparison_when_either_side_is_silent(self):
         assert live.cross_check(STATUS_ABSTAIN, "+")[0] == "not compared"
         assert live.cross_check(STATUS_FAILED, "")[0] == "not compared"
+
+
+class TestEndToEndOnRealHistory:
+    """
+    The whole seven-step script on real Space-Track history (daily medians
+    of gp_history, pulled 2026-11-25), offline. These lock in the two
+    validation cases: if a change to the detector breaks either, this fails.
+    """
+
+    @pytest.mark.parametrize(
+        "norad, verdict, quarter, cross",
+        [
+            (27386, "FAILED — orbit maintenance stopped abruptly", "2012-04-01", "AGREE"),
+            (25994, "MAINTENANCE ENDED GRADUALLY", "2022-07-01", "AGREE"),
+        ],
+    )
+    def test_script_reproduces_validation(self, norad, verdict, quarter, cross, tmp_path):
+        import subprocess
+
+        history = ROOT / "data" / "examples" / f"{norad}_history.csv"
+        out = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "analyse_satellite.py"), str(norad),
+             "--offline", "--history", str(history)],
+            capture_output=True, text=True, cwd=ROOT, timeout=180,
+        ).stdout
+        assert verdict in out
+        assert f"Cessation quarter            {quarter}" in out
+        assert f"Result                       {cross}" in out
