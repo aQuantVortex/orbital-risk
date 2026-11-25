@@ -85,7 +85,7 @@ class SpaceTrackClient:
                 f"{self.config_path} not found. Copy config.example.ini to "
                 "config.ini and fill in your Space-Track credentials."
             )
-        parser = configparser.ConfigParser()
+        parser = configparser.ConfigParser(interpolation=None)  # passwords may contain %
         parser.read(self.config_path)
         return parser["spacetrack"]["username"], parser["spacetrack"]["password"]
 
